@@ -95,6 +95,9 @@ type Client struct {
 	// lookupFn is a custom function to return URL lookup type supported by the server.
 	lookupFn func(u url.URL, bucketName string) BucketLookupType
 
+	// newRequestWithContextFn is a custom function to return a new http.Request
+	newRequestWithContextFn func(ctx context.Context, method, url string, body io.Reader) (*http.Request, error)
+
 	// Factory for MD5 hash functions.
 	md5Hasher    func() md5simd.Hasher
 	sha256Hasher func() md5simd.Hasher
@@ -146,6 +149,12 @@ type Options struct {
 	// Custom hash routines. Leave nil to use standard.
 	CustomMD5    func() md5simd.Hasher
 	CustomSHA256 func() md5simd.Hasher
+
+	// CustomRequestWithContext allows customizing the outgoing HTTP request.
+	// It takes a context, method, URL, and body, and returns a new *http.Request.
+	// This can be used to modify requests, such as adding custom headers.
+	// If nil, http.NewRequestWithContext will be used by default.
+	CustomRequestWithContext func(ctx context.Context, method, url string, body io.Reader) (*http.Request, error)
 
 	// Number of times a request is retried. Defaults to 10 retries if this option is not configured.
 	// Set to 1 to disable retries.
@@ -294,6 +303,11 @@ func privateNew(endpoint string, opts *Options) (*Client, error) {
 	}
 	if clnt.sha256Hasher == nil {
 		clnt.sha256Hasher = newSHA256Hasher
+	}
+
+	clnt.newRequestWithContextFn = opts.CustomRequestWithContext
+	if clnt.newRequestWithContextFn == nil {
+		clnt.newRequestWithContextFn = http.NewRequestWithContext
 	}
 
 	clnt.trailingHeaderSupport = opts.TrailingHeaders && clnt.overrideSignerType.IsV4()
@@ -819,7 +833,7 @@ func (c *Client) newRequest(ctx context.Context, method string, metadata request
 	}
 
 	// Initialize a new HTTP request for the method.
-	req, err = http.NewRequestWithContext(ctx, method, targetURL.String(), nil)
+	req, err = c.newRequestWithContextFn(ctx, method, targetURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}

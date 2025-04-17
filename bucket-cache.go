@@ -203,7 +203,7 @@ func (c *Client) getBucketLocationRequest(ctx context.Context, bucketName string
 	}
 
 	// Get a new HTTP request for the method.
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+	req, err := c.newRequestWithContextFn(ctx, http.MethodGet, urlStr, nil)
 	if err != nil {
 		return nil, err
 	}
